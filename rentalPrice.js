@@ -1,75 +1,147 @@
+const CAR_CLASSES = {
+    COMPACT: 'Compact',
+    ELECTRIC: 'Electric',
+    CABRIO: 'Cabrio',
+    RACER: 'Racer',
+    UNKNOWN: 'Unknown'
+};
 
-function price(pickup, dropoff, pickupDate, dropoffDate, type, age) {
-  const clazz = getClazz(type);
-  const days = get_days(pickupDate, dropoffDate);
-  const season = getSeason(pickupDate, dropoffDate);
+const SEASONS = {
+    HIGH: 'High',
+    LOW: 'Low'
+};
 
-  if (age < 18) {
-      return "Driver too young - cannot quote the price";
-  }
+const LIMITS = {
+    MIN_AGE: 18,
+    COMPACT_ONLY_MAX_AGE: 21,
+    RACER_SURCHARGE_MAX_AGE: 25,
+    LONG_RENTAL_DAYS: 10,
+    MIN_LICENSE_YEARS: 1,
+    LICENSE_UNDER_TWO_YEARS: 2,
+    LICENSE_UNDER_THREE_YEARS: 3
+};
 
-  if (age <= 21 && clazz !== "Compact") {
-      return "Drivers 21 y/o or less can only rent Compact vehicles";
-  }
+const PRICE_FACTORS = {
+    RACER_HIGH_SEASON: 1.5,
+    HIGH_SEASON: 1.15,
+    LONG_RENTAL_LOW_SEASON: 0.9,
+    LICENSE_UNDER_TWO_YEARS: 1.3
+};
 
-  let rentalprice = age * days;
+const LICENSE_HIGH_SEASON_DAILY_SURCHARGE = 15;
+const HIGH_SEASON_START_MONTH = 4;
+const HIGH_SEASON_END_MONTH = 10;
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
-  if (clazz === "Racer" && age <= 25 && season === "High") {
-      rentalprice *= 1.5;
-  }
+function price(pickupDate, dropoffDate, type, age, licenseYears) {
+    const carClass = getCarClass(type);
+    const rentalDays = getRentalDays(pickupDate, dropoffDate);
+    const season = getSeason(pickupDate, dropoffDate);
 
-  if (season === "High" ) {
-    rentalprice *= 1.15;
-  }
+    const eligibilityError = getEligibilityError(age, carClass, licenseYears);
+    if (eligibilityError) {
+        return eligibilityError;
+    }
 
-  if (days > 10 && season === "Low" ) {
-      rentalprice *= 0.9;
-  }
-  return '$' + rentalprice;
+    let totalPrice = getBasePrice(age, rentalDays);
+    totalPrice = applyMultipliers(totalPrice, age, rentalDays, carClass, season, licenseYears);
+    totalPrice = applyFixedAdditions(totalPrice, rentalDays, season, licenseYears);
+
+    return '$' + totalPrice;
 }
 
-function getClazz(type) {
-  switch (type) {
-      case "Compact":
-          return "Compact";
-      case "Electric":
-          return "Electric";
-      case "Cabrio":
-          return "Cabrio";
-      case "Racer":
-          return "Racer";
-      default:
-          return "Unknown";
-  }
+function getEligibilityError(age, carClass, licenseYears) {
+    if (age < LIMITS.MIN_AGE) {
+        return 'Driver too young - cannot quote the price';
+    }
+
+    if (licenseYears < LIMITS.MIN_LICENSE_YEARS) {
+        return 'Driver has held a license for less than a year - cannot quote the price';
+    }
+
+    if (age <= LIMITS.COMPACT_ONLY_MAX_AGE && carClass !== CAR_CLASSES.COMPACT) {
+        return 'Drivers 21 y/o or less can only rent Compact vehicles';
+    }
+
+    return null;
 }
 
-function get_days(pickupDate, dropoffDate) {
-  const oneDay = 24 * 60 * 60 * 1000; // hours*minutes*seconds*milliseconds
-  const firstDate = new Date(pickupDate);
-  const secondDate = new Date(dropoffDate);
+function getBasePrice(age, rentalDays) {
+    return age * rentalDays;
+}
 
-  return Math.round(Math.abs((firstDate - secondDate) / oneDay)) + 1;
+function applyMultipliers(totalPrice, age, rentalDays, carClass, season, licenseYears) {
+    let adjustedPrice = totalPrice;
+
+    if (carClass === CAR_CLASSES.RACER && age <= LIMITS.RACER_SURCHARGE_MAX_AGE && season === SEASONS.HIGH) {
+        adjustedPrice *= PRICE_FACTORS.RACER_HIGH_SEASON;
+    }
+
+    if (season === SEASONS.HIGH) {
+        adjustedPrice *= PRICE_FACTORS.HIGH_SEASON;
+    }
+
+    if (season === SEASONS.LOW && rentalDays > LIMITS.LONG_RENTAL_DAYS) {
+        adjustedPrice *= PRICE_FACTORS.LONG_RENTAL_LOW_SEASON;
+    }
+
+    if (licenseYears < LIMITS.LICENSE_UNDER_TWO_YEARS) {
+        adjustedPrice *= PRICE_FACTORS.LICENSE_UNDER_TWO_YEARS;
+    }
+
+    return adjustedPrice;
+}
+
+function applyFixedAdditions(totalPrice, rentalDays, season, licenseYears) {
+    if (season === SEASONS.HIGH && licenseYears < LIMITS.LICENSE_UNDER_THREE_YEARS) {
+        return totalPrice + LICENSE_HIGH_SEASON_DAILY_SURCHARGE * rentalDays;
+    }
+
+    return totalPrice;
+}
+
+function getCarClass(type) {
+    const normalizedType = String(type).trim().toLowerCase();
+
+    switch (normalizedType) {
+        case 'compact':
+            return CAR_CLASSES.COMPACT;
+        case 'electric':
+            return CAR_CLASSES.ELECTRIC;
+        case 'cabrio':
+            return CAR_CLASSES.CABRIO;
+        case 'racer':
+            return CAR_CLASSES.RACER;
+        default:
+            return CAR_CLASSES.UNKNOWN;
+    }
+}
+
+function getRentalDays(pickupDate, dropoffDate) {
+    const pickup = new Date(pickupDate);
+    const dropoff = new Date(dropoffDate);
+    return Math.round(Math.abs((pickup - dropoff) / DAY_IN_MS)) + 1;
 }
 
 function getSeason(pickupDate, dropoffDate) {
-  const pickup = new Date(pickupDate);
-  const dropoff = new Date(dropoffDate);
+    const pickup = new Date(pickupDate);
+    const dropoff = new Date(dropoffDate);
 
-  const start = 4; 
-  const end = 10;
+    const pickupMonth = pickup.getMonth();
+    const dropoffMonth = dropoff.getMonth();
 
-  const pickupMonth = pickup.getMonth();
-  const dropoffMonth = dropoff.getMonth();
+    const startsInHighSeason =
+        pickupMonth >= HIGH_SEASON_START_MONTH && pickupMonth <= HIGH_SEASON_END_MONTH;
+    const endsInHighSeason =
+        dropoffMonth >= HIGH_SEASON_START_MONTH && dropoffMonth <= HIGH_SEASON_END_MONTH;
+    const spansFullHighSeason =
+        pickupMonth < HIGH_SEASON_START_MONTH && dropoffMonth > HIGH_SEASON_END_MONTH;
 
-  if (
-      (pickupMonth >= start && pickupMonth <= end) ||
-      (dropoffMonth >= start && dropoffMonth <= end) ||
-      (pickupMonth < start && dropoffMonth > end)
-  ) {
-      return "High";
-  } else {
-      return "Low";
-  }
+    if (startsInHighSeason || endsInHighSeason || spansFullHighSeason) {
+        return SEASONS.HIGH;
+    }
+
+    return SEASONS.LOW;
 }
 
 exports.price = price;
