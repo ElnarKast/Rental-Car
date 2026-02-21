@@ -29,8 +29,8 @@ const PRICE_FACTORS = {
 };
 
 const LICENSE_HIGH_SEASON_DAILY_SURCHARGE = 15;
-const HIGH_SEASON_START_MONTH = 4;
-const HIGH_SEASON_END_MONTH = 10;
+const HIGH_SEASON_START_MONTH = 3;
+const HIGH_SEASON_END_MONTH = 9;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 function price(pickupDate, dropoffDate, type, age, licenseYears) {
